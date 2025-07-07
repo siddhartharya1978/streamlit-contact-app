@@ -1,9 +1,9 @@
+
 import streamlit as st
 import pandas as pd
 import json
 import os
 import re
-from docx import Document
 
 CONTACT_FILE = "contacts.csv"
 LISTS_FILE = "saved_lists.json"
@@ -16,7 +16,8 @@ st.set_page_config(layout="wide", page_title="Skype Contact Manager")
 @st.cache_data
 def load_contacts():
     df = pd.read_csv(CONTACT_FILE, encoding="ISO-8859-1")
-    df["checkbox"] = False
+    if "checkbox" not in df.columns:
+        df["checkbox"] = False
     return df
 
 # Extract +tags (case-insensitive, non-numeric)
@@ -111,10 +112,13 @@ def add_contact_ui(df):
     new_contact = st.text_input("Enter New Contact (with tags)")
     if st.button("➕ Add Contact"):
         if new_contact.strip():
-            new_row = pd.DataFrame({"display_name": [new_contact], "checkbox": [False]})
-            df = pd.concat([df, new_row], ignore_index=True)
+            new_row = pd.DataFrame({"display_name": [new_contact]})
+            for col in df.columns:
+                if col not in new_row.columns:
+                    new_row[col] = False if col == "checkbox" else ""
+            df = pd.concat([df, new_row[df.columns]], ignore_index=True)
             df.to_csv(CONTACT_FILE, index=False, encoding="ISO-8859-1")
-            st.success("Contact added.")
+            st.success("Contact added. Please refresh to see the change.")
     return df
 
 # UI – Channel Matrix
@@ -141,31 +145,22 @@ def channel_matrix_ui():
     except Exception as e:
         st.warning(f"Matrix load failed: {e}")
 
-# UI – Doc Viewer
-def doc_viewer_ui():
-    st.header("📄 Channel List (Doc File View)")
+# UI – View Docx File
+def docx_viewer_ui():
+    st.header("📄 View CHANNELS LIST Document")
     try:
-        document = Document(DOC_FILE)
-        full_text = []
-
+        import docx
+        document = docx.Document(DOC_FILE)
         for para in document.paragraphs:
-            if para.text.strip():
-                full_text.append(para.text.strip())
-
-        for table in document.tables:
-            for row in table.rows:
-                cells = [cell.text.strip() for cell in row.cells]
-                full_text.append(" | ".join(cells))
-
-        st.text_area("CHANNELS LIST.docx", "\n".join(full_text), height=600)
+            st.markdown(para.text)
     except Exception as e:
-        st.error(f"Could not read document: {e}")
+        st.error(f"Could not load DOCX file: {e}")
 
 # ========================== MAIN ==========================
 df = load_contacts()
 saved_lists = load_saved_lists()
 
-tab1, tab2, tab3 = st.tabs(["📁 Contact Manager", "📊 Channel Matrix", "📄 Channel List (Doc)"])
+tab1, tab2, tab3 = st.tabs(["📁 Contact Manager", "📊 Channel Matrix", "📄 New Channel List"])
 
 with tab1:
     df, _ = tag_filter_ui(df)
@@ -177,4 +172,4 @@ with tab2:
     channel_matrix_ui()
 
 with tab3:
-    doc_viewer_ui()
+    docx_viewer_ui()
